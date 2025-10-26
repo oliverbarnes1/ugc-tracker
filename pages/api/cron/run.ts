@@ -1,0 +1,299 @@
+import { NextApiRequest, NextApiResponse } from 'next';
+import { runTikTokScraper, normalizeItemToPostAndStat, normalizeApifyItem, sleep } from '../../../src/lib/apify';
+const db = require('../../../src/lib/db');
+
+interface Creator {
+  id: number;
+  external_id: string;
+  platform: string;
+  username: string;
+  display_name: string;
+  is_active: boolean;
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Check for cron secret
+  const cronKey = req.headers['x-cron-key'];
+  const expectedKey = process.env.CRON_SECRET;
+
+  if (!cronKey || !expectedKey || cronKey !== expectedKey) {
+    console.log('Unauthorized cron request - missing or invalid key');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    console.log('Starting TikTok scraper cron job...');
+
+    // Get all active creators
+    const creators = db.prepare(`
+      SELECT id, external_id, platform, username, display_name, is_active
+      FROM creators 
+      WHERE is_active = 1 AND platform = 'tiktok'
+    `).all() as Creator[];
+
+    if (creators.length === 0) {
+      console.log('No active TikTok creators found');
+      return res.status(200).json({ 
+        success: true, 
+        message: 'No active TikTok creators found',
+        processed: 0 
+      });
+    }
+
+    console.log(`Found ${creators.length} active TikTok creators`);
+
+    // Batch creators into groups of 10
+    const batchSize = 10;
+    const batches: Creator[][] = [];
+    for (let i = 0; i < creators.length; i += batchSize) {
+      batches.push(creators.slice(i, i + batchSize));
+    }
+
+    console.log(`Processing ${batches.length} batches of creators`);
+
+    let totalProcessed = 0;
+    let totalErrors = 0;
+
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`Processing batch ${batchIndex + 1}/${batches.length} with ${batch.length} creators`);
+
+      // Create sync logs for this batch
+      const syncLogs = batch.map(creator => {
+        const log = db.prepare(`
+          INSERT INTO sync_logs (workspace_id, platform, sync_type, status, started_at)
+          VALUES (1, 'tiktok', 'posts', 'queued', CURRENT_TIMESTAMP)
+        `).run();
+        return { id: log.lastInsertRowid, creator_id: creator.id };
+      });
+
+      try {
+        // Run the TikTok scraper for this batch
+        const result = await runTikTokScraper(
+          batch.map(creator => ({
+            id: creator.id,
+            handle: `@${creator.username}`, // Format as TikTok handle
+            platform: creator.platform,
+          })),
+          process.env.APIFY_ACTOR_ID! // This now contains the task ID
+        );
+
+        if (!result.success) {
+          console.error(`Batch ${batchIndex + 1} failed:`, result.error);
+          
+          // Update sync logs with error
+          syncLogs.forEach(log => {
+            db.prepare(`
+              UPDATE sync_logs 
+              SET status = 'error', error_message = ?, completed_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `).run(result.error || 'Unknown error', log.id);
+          });
+          
+          totalErrors += batch.length;
+          continue;
+        }
+
+        console.log(`Batch ${batchIndex + 1} succeeded with ${result.items.length} items`);
+
+        // Process each item
+        let batchProcessed = 0;
+        let batchErrors = 0;
+
+        for (const item of result.items) {
+          try {
+            // Log the first item to see the real Apify data structure
+            if (batchProcessed === 0) {
+              console.log('=== FULL APIFY ITEM STRUCTURE ===');
+              console.log(JSON.stringify(item, null, 2));
+            }
+
+            // Find the creator for this item
+            let creator = null;
+            
+            // Try authorMeta.name first (TikTok format)
+            if (item.authorMeta && item.authorMeta.name) {
+              creator = batch.find(c => c.username === item.authorMeta.name);
+              console.log(`Creator lookup by authorMeta.name: ${item.authorMeta.name} -> ${creator?.username || 'NOT FOUND'}`);
+            }
+            
+            // Fallback to URL extraction
+            if (!creator && item.webVideoUrl) {
+              const urlMatch = item.webVideoUrl.match(/@([^/]+)/);
+              if (urlMatch) {
+                const usernameFromUrl = urlMatch[1];
+                creator = batch.find(c => c.username === usernameFromUrl);
+                console.log(`Creator lookup by URL: ${usernameFromUrl} -> ${creator?.username || 'NOT FOUND'}`);
+              }
+            }
+            
+            // Fallback to other matching methods
+            if (!creator) {
+              creator = batch.find(c => c.username === item.username || c.external_id === item.userId);
+            }
+            
+            if (!creator) {
+              console.error('Could not find creator for item:', { id: item.id, authorMeta: item.authorMeta, webVideoUrl: item.webVideoUrl });
+              continue;
+            }
+
+            // Normalize the item using the new function
+            const normalized = normalizeApifyItem(item, creator.id);
+            if (!normalized) {
+              console.error('Failed to normalize item:', { id: item.id, error: 'Normalization returned null' });
+              continue;
+            }
+
+            // Debug: Log the normalized data for first item
+            if (batchProcessed === 0) {
+              console.log('=== NORMALIZED DATA ===');
+              console.log(JSON.stringify(normalized, null, 2));
+            }
+
+            // Upsert the post
+            const postResult = db.prepare(`
+              INSERT INTO posts (creator_id, external_id, platform, content_type, caption, media_url, thumbnail_url, post_url, published_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(creator_id, external_id, platform) DO UPDATE SET
+                caption = excluded.caption,
+                media_url = excluded.media_url,
+                thumbnail_url = excluded.thumbnail_url,
+                post_url = excluded.post_url,
+                published_at = excluded.published_at,
+                updated_at = CURRENT_TIMESTAMP
+            `).run(
+              normalized.post.creator_id,
+              normalized.post.external_id,
+              normalized.post.platform,
+              normalized.post.content_type,
+              normalized.post.caption,
+              normalized.post.media_url,
+              normalized.post.thumbnail_url,
+              normalized.post.post_url,
+              normalized.post.published_at
+            );
+
+            // Get the post ID (either from insert or existing post)
+            let postId = postResult.lastInsertRowid;
+            if (!postId || postId === 0) {
+              // If lastInsertRowid is 0, the post already existed, so get its ID
+              const existingPost = db.prepare(`
+                SELECT id FROM posts 
+                WHERE creator_id = ? AND external_id = ? AND platform = ?
+              `).get(
+                normalized.post.creator_id,
+                normalized.post.external_id,
+                normalized.post.platform
+              );
+              postId = existingPost?.id;
+            }
+
+            if (!postId) {
+              console.error('Failed to get postId after upsert:', { 
+                lastInsertRowid: postResult.lastInsertRowid,
+                creator_id: normalized.post.creator_id,
+                external_id: normalized.post.external_id,
+                platform: normalized.post.platform
+              });
+              continue;
+            }
+
+            // Always insert PostStat with real data (never fake values)
+            console.log(`Inserting PostStat for postId: ${postId}, views: ${normalized.stat.views}, likes: ${normalized.stat.likes}`);
+            
+            try {
+              // Insert new PostStat (always create new row, don't update existing)
+              const statResult = db.prepare(`
+                INSERT INTO post_stats (post_id, likes, comments, shares, views, saves, engagement_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                postId,
+                normalized.stat.likes,
+                normalized.stat.comments,
+                normalized.stat.shares,
+                normalized.stat.views,
+                normalized.stat.saves,
+                normalized.stat.engagement_rate
+              );
+              
+              console.log(`PostStat inserted successfully:`, statResult);
+            } catch (statError) {
+              console.error('PostStat insertion error:', statError, { 
+                postId, 
+                stat: normalized.stat,
+                error: statError.message 
+              });
+              // Continue processing other items even if one fails
+            }
+
+            batchProcessed++;
+          } catch (itemError) {
+            console.error('Error processing item:', itemError, item);
+            batchErrors++;
+          }
+        }
+
+        // Update sync logs with success
+        syncLogs.forEach(log => {
+          db.prepare(`
+            UPDATE sync_logs 
+            SET status = 'success', records_processed = ?, records_created = ?, completed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(batchProcessed, batchProcessed, log.id);
+        });
+
+        totalProcessed += batchProcessed;
+        totalErrors += batchErrors;
+
+        console.log(`Batch ${batchIndex + 1} completed: ${batchProcessed} processed, ${batchErrors} errors`);
+        
+        // If no items were processed, throw an error
+        if (batchProcessed === 0 && result.items.length > 0) {
+          throw new Error(`Normalization failed - ${result.items.length} items received but 0 processed`);
+        }
+
+        // Sleep between batches to avoid throttling
+        if (batchIndex < batches.length - 1) {
+          console.log('Sleeping 5 seconds before next batch...');
+          await sleep(5000);
+        }
+
+      } catch (batchError) {
+        console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
+        
+        // Update sync logs with error
+        syncLogs.forEach(log => {
+          db.prepare(`
+            UPDATE sync_logs 
+            SET status = 'error', error_message = ?, completed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(batchError instanceof Error ? batchError.message : 'Unknown error', log.id);
+        });
+        
+        totalErrors += batch.length;
+      }
+    }
+
+    console.log(`Cron job completed: ${totalProcessed} items processed, ${totalErrors} errors`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cron job completed',
+      processed: totalProcessed,
+      errors: totalErrors,
+      batches: batches.length,
+    });
+
+  } catch (error) {
+    console.error('Cron job failed:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
