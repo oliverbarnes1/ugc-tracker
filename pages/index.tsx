@@ -79,12 +79,17 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch('/api/dashboard/stats')
+      // Use demo API for production deployment
+      const apiEndpoint = process.env.NODE_ENV === 'production' 
+        ? '/api/dashboard/stats-demo' 
+        : '/api/dashboard/stats'
+      
+      const response = await fetch(apiEndpoint)
       const result = await response.json()
-          if (result.success) {
-            setDashboardData(result.data)
-            setVisiblePosts(8) // Reset to show 8 posts initially
-          }
+      if (result.success) {
+        setDashboardData(result.data)
+        setVisiblePosts(8) // Reset to show 8 posts initially
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
@@ -93,6 +98,11 @@ export default function Dashboard() {
   }
 
   const handleSync = async () => {
+    if (process.env.NODE_ENV === 'production') {
+      alert('Sync functionality is disabled in demo mode. This feature requires a database connection.')
+      return
+    }
+    
     setSyncing(true)
     try {
       const response = await fetch('/api/cron/run', {
