@@ -28,12 +28,7 @@ export default function CreatorsPage() {
   useEffect(() => {
     const fetchCreatorStats = async () => {
       try {
-        // Use demo API for production deployment
-        const apiEndpoint = process.env.NODE_ENV === 'production' 
-          ? '/api/dashboard/stats-demo' 
-          : '/api/dashboard/stats'
-        
-        const response = await fetch(apiEndpoint)
+        const response = await fetch('/api/dashboard/stats')
         const result = await response.json()
         if (result.success) {
           setCreatorStats(result.data.creatorStats)
