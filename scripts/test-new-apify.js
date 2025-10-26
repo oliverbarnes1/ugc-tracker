@@ -1,6 +1,6 @@
 const https = require('https');
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN || 'apify_api_iigw89hnBNdZgS6NWs2WhT4mpM4Rk324765q';
+const APIFY_TOKEN = process.env.APIFY_TOKEN || 'YOUR_APIFY_TOKEN_HERE';
 const APIFY_TASK_ID = 'H6Xz1pDsT21HYz9R9';
 const CREATOR_HANDLE = '@_carlapicks_';
 

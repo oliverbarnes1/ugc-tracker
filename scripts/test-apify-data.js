@@ -22,7 +22,7 @@ function httpsRequest(url, options = {}) {
 }
 
 async function testApifyData() {
-  const APIFY_TOKEN = 'apify_api_iigw89hnBNdZgS6NWs2WhT4mpM4Rk324765q';
+  const APIFY_TOKEN = process.env.APIFY_TOKEN || 'YOUR_APIFY_TOKEN_HERE';
   const TASK_ID = 'vB0foLluLnDBEWNgL';
   
   const input = {
