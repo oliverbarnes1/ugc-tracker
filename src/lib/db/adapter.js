@@ -1,6 +1,6 @@
 // Database adapter that works with both SQLite (local) and PostgreSQL (production)
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres');
 
 if (isProduction) {
   // Use PostgreSQL in production
