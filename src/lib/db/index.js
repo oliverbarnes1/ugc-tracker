@@ -2,12 +2,20 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
-const dataDir = path.dirname(dbPath);
-
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Use different database paths for development vs production
+let dbPath;
+if (process.env.NODE_ENV === 'production') {
+  // In production (Vercel), use /tmp directory which is writable
+  dbPath = '/tmp/ugc-tracker.db';
+} else {
+  // In development, use local data directory
+  dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
+  const dataDir = path.dirname(dbPath);
+  
+  // Ensure data directory exists in development
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 }
 
 // Initialize database
