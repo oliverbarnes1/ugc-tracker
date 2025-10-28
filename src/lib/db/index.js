@@ -1,26 +1,32 @@
 // Use different database implementations for development vs production
 let db;
 
-if (process.env.NODE_ENV === 'production') {
-  // In production (Vercel), use in-memory database
-  console.log('Using in-memory database for production');
-  db = require('./memory');
-} else {
-  // In development, use SQLite
-  const Database = require('better-sqlite3');
-  const path = require('path');
-  const fs = require('fs');
-  
-  const dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
-  const dataDir = path.dirname(dbPath);
-  
-  // Ensure data directory exists in development
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+try {
+  if (process.env.NODE_ENV === 'production') {
+    // In production (Vercel), use in-memory database
+    console.log('Using in-memory database for production');
+    db = require('./memory');
+  } else {
+    // In development, try to use SQLite
+    const Database = require('better-sqlite3');
+    const path = require('path');
+    const fs = require('fs');
+    
+    const dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
+    const dataDir = path.dirname(dbPath);
+    
+    // Ensure data directory exists in development
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Initialize SQLite database
+    db = new Database(dbPath);
   }
-  
-  // Initialize SQLite database
-  db = new Database(dbPath);
+} catch (error) {
+  console.log('SQLite not available, falling back to in-memory database:', error.message);
+  // Fallback to in-memory database if SQLite fails
+  db = require('./memory');
 }
 
 // Enable foreign keys
