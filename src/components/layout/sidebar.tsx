@@ -5,13 +5,15 @@ import {
   Users, 
   Settings, 
   Home,
-  Image
+  Image,
+  DollarSign
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Gallery', href: '/gallery', icon: Image },
   { name: 'Creators', href: '/creators', icon: Users },
+  { name: 'Payments', href: '/payments', icon: DollarSign },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
