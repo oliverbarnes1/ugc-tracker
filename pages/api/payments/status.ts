@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-const db = require('../../../src/lib/db/build-safe');
+import { db } from '../../../src/lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Get creator payment data
-    const creators = db.prepare(`
+    const creators = await db.all(`
       SELECT 
         c.id as creator_id,
         c.username,
@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE c.platform = 'tiktok' AND c.is_active = 1
       GROUP BY c.id, c.username, c.display_name
       ORDER BY c.username
-    `).all();
+    `);
 
     const paymentData = creators.map((creator: any) => {
       const firstPostDate = new Date(creator.first_post_date);
@@ -35,12 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const postsPerDay = daysSinceStart > 0 ? totalPosts / daysSinceStart : 0;
       
       // Get posts per day for missed days calculation
-      const postingDaysWithCounts = db.prepare(`
+      const postingDaysWithCounts = await db.all(`
         SELECT DATE(p.published_at) as post_date, COUNT(*) as post_count
         FROM posts p
         WHERE p.creator_id = ?
         GROUP BY DATE(p.published_at)
-      `).all(creator.creator_id);
+      `, [creator.creator_id]);
 
       const postCountsByDate = new Map();
       postingDaysWithCounts.forEach((day: any) => {

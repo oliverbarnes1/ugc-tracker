@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-const db = require('../../../../src/lib/db/build-safe');
+import { db } from '../../../../src/lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -19,46 +19,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Get current stats for undo functionality
-      const currentStats = db.prepare(`
+      const currentStats = await db.get(`
         SELECT views, likes, comments, shares 
         FROM post_stats 
         WHERE post_id = ?
-      `).get(id);
+      `, [id]);
 
       if (!currentStats) {
         return res.status(404).json({ error: 'Post not found' });
       }
 
       // Store original stats in a separate table for undo functionality
-      const hasOriginalStats = db.prepare(`
+      const hasOriginalStats = await db.get(`
         SELECT id FROM post_stats_original WHERE post_id = ?
-      `).get(id);
+      `, [id]);
 
       if (!hasOriginalStats) {
         // Store original stats if not already stored
-        db.prepare(`
+        await db.run(`
           INSERT INTO post_stats_original (post_id, views, likes, comments, shares, created_at)
           VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `).run(id, currentStats.views, currentStats.likes, currentStats.comments, currentStats.shares);
+        `, [id, currentStats.views, currentStats.likes, currentStats.comments, currentStats.shares]);
       }
 
       // Update the stats
-      const result = db.prepare(`
+      await db.run(`
         UPDATE post_stats 
         SET views = ?, likes = ?, comments = ?, shares = ?, engagement_rate = ?
         WHERE post_id = ?
-      `).run(
+      `, [
         views, 
         likes, 
         comments, 
         shares,
         views > 0 ? (likes + comments + shares) / views : 0, // Recalculate engagement rate
         id
-      );
-
-      if (result.changes === 0) {
-        return res.status(404).json({ error: 'Post not found' });
-      }
+      ]);
 
       // Return success with original values for undo
       res.status(200).json({
@@ -75,33 +71,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'POST' && req.body.action === 'undo') {
     try {
       // Get original stats
-      const originalStats = db.prepare(`
+      const originalStats = await db.get(`
         SELECT views, likes, comments, shares 
         FROM post_stats_original 
         WHERE post_id = ?
-      `).get(id);
+      `, [id]);
 
       if (!originalStats) {
         return res.status(404).json({ error: 'No original stats found to undo to' });
       }
 
       // Restore original stats
-      const result = db.prepare(`
+      await db.run(`
         UPDATE post_stats 
         SET views = ?, likes = ?, comments = ?, shares = ?, engagement_rate = ?
         WHERE post_id = ?
-      `).run(
+      `, [
         originalStats.views,
         originalStats.likes,
         originalStats.comments,
         originalStats.shares,
         originalStats.views > 0 ? (originalStats.likes + originalStats.comments + originalStats.shares) / originalStats.views : 0,
         id
-      );
-
-      if (result.changes === 0) {
-        return res.status(404).json({ error: 'Post not found' });
-      }
+      ]);
 
       res.status(200).json({
         success: true,
@@ -116,22 +108,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'GET') {
     try {
       // Get current stats
-      const stats = db.prepare(`
+      const stats = await db.get(`
         SELECT views, likes, comments, shares, engagement_rate
         FROM post_stats 
         WHERE post_id = ?
-      `).get(id);
+      `, [id]);
 
       if (!stats) {
         return res.status(404).json({ error: 'Post not found' });
       }
 
       // Check if original stats exist for undo functionality
-      const hasOriginalStats = db.prepare(`
+      const hasOriginalStats = await db.get(`
         SELECT views, likes, comments, shares 
         FROM post_stats_original 
         WHERE post_id = ?
-      `).get(id);
+      `, [id]);
 
       res.status(200).json({
         success: true,

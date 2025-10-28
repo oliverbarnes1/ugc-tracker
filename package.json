@@ -12,6 +12,7 @@
     "test:cron": "node scripts/test-cron.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "apify-client": "^2.8.2",
     "bcryptjs": "^2.4.3",
     "clsx": "^1.2.1",

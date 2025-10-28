@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-const db = require('../../../src/lib/db/build-safe');
+import { db } from '../../../src/lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,33 +8,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Get total posts count
-    const totalPosts = db.prepare(`
+    const totalPosts = await db.get(`
       SELECT COUNT(*) as count FROM posts WHERE platform = 'tiktok'
-    `).get() as { count: number };
+    `) as { count: number };
 
     // Get total creators count
-    const totalCreators = db.prepare(`
+    const totalCreators = await db.get(`
       SELECT COUNT(*) as count FROM creators WHERE platform = 'tiktok' AND is_active = 1
-    `).get() as { count: number };
+    `) as { count: number };
 
     // Get total views across all posts
-    const totalViews = db.prepare(`
+    const totalViews = await db.get(`
       SELECT COALESCE(SUM(ps.views), 0) as total_views
       FROM posts p
       LEFT JOIN post_stats ps ON p.id = ps.post_id
       WHERE p.platform = 'tiktok'
-    `).get() as { total_views: number };
+    `) as { total_views: number };
 
     // Get total likes across all posts
-    const totalLikes = db.prepare(`
+    const totalLikes = await db.get(`
       SELECT COALESCE(SUM(ps.likes), 0) as total_likes
       FROM posts p
       LEFT JOIN post_stats ps ON p.id = ps.post_id
       WHERE p.platform = 'tiktok'
-    `).get() as { total_likes: number };
+    `) as { total_likes: number };
 
     // Get top posts from last 7 days ordered by views
-    const topPosts = db.prepare(`
+    const topPosts = await db.all(`
       SELECT 
         p.id,
         p.caption,
@@ -54,10 +54,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE p.platform = 'tiktok'
         AND p.created_at >= datetime('now', '-7 days')
       ORDER BY ps.views DESC
-    `).all();
+    `);
 
     // Get creator performance with 7-day posting activity
-    const creatorStatsRaw = db.prepare(`
+    const creatorStatsRaw = await db.all(`
       SELECT 
         c.id,
         c.username,
@@ -72,10 +72,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE c.platform = 'tiktok' AND c.is_active = 1
       GROUP BY c.id, c.username, c.display_name
       ORDER BY total_views DESC
-    `).all();
+    `);
 
     // Process each creator to add 7-day activity data
-    const creatorStatsWithActivity = creatorStatsRaw.map((creator: any) => {
+    const creatorStatsWithActivity = await Promise.all(creatorStatsRaw.map(async (creator: any) => {
       const dailyActivity: { [key: string]: number } = {};
       
       // Initialize all 7 days to 0 posts
@@ -87,28 +87,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Fetch actual post counts for the last 7 days for this creator
-      const postsPerDay = db.prepare(`
+      const postsPerDay = await db.all(`
         SELECT DATE(published_at) as post_date, COUNT(*) as count
         FROM posts
         WHERE creator_id = ?
           AND platform = 'tiktok'
           AND published_at >= datetime('now', '-7 days')
         GROUP BY post_date
-      `).all(creator.id);
+      `, [creator.id]);
 
       postsPerDay.forEach((day: any) => {
         dailyActivity[day.post_date] = day.count;
       });
 
       // Get total views for the last 7 days
-      const last7DaysViews = db.prepare(`
+      const last7DaysViews = await db.get(`
         SELECT COALESCE(SUM(ps.views), 0) as total_views_7_days
         FROM posts p
         LEFT JOIN post_stats ps ON p.id = ps.post_id
         WHERE p.creator_id = ?
           AND p.platform = 'tiktok'
           AND p.published_at >= datetime('now', '-7 days')
-      `).get(creator.id);
+      `, [creator.id]);
 
       // Convert dailyActivity object to an array of { date: string, count: number } for easier frontend processing
       const activityArray = Object.keys(dailyActivity).sort().map(date => ({
@@ -121,7 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         activity: activityArray, // This will be an array of { date: 'YYYY-MM-DD', count: N }
         total_views_7_days: last7DaysViews?.total_views_7_days || 0
       };
-    });
+    }));
 
     // Helper function to fill missing days with 0 views
     const fillMissingDays = (data: any[], days: number) => {
@@ -144,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Get daily views data for different time periods
-    const dailyViews7DaysRaw = db.prepare(`
+    const dailyViews7DaysRaw = await db.all(`
       SELECT 
         DATE(p.published_at) as date,
         COALESCE(SUM(ps.views), 0) as views
@@ -154,9 +154,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         AND p.published_at >= datetime('now', '-7 days')
       GROUP BY DATE(p.published_at)
       ORDER BY date
-    `).all();
+    `);
 
-    const dailyViews30DaysRaw = db.prepare(`
+    const dailyViews30DaysRaw = await db.all(`
       SELECT 
         DATE(p.published_at) as date,
         COALESCE(SUM(ps.views), 0) as views
@@ -166,9 +166,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         AND p.published_at >= datetime('now', '-30 days')
       GROUP BY DATE(p.published_at)
       ORDER BY date
-    `).all();
+    `);
 
-    const dailyViewsAllTimeRaw = db.prepare(`
+    const dailyViewsAllTimeRaw = await db.all(`
       SELECT 
         DATE(p.published_at) as date,
         COALESCE(SUM(ps.views), 0) as views
@@ -177,7 +177,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE p.platform = 'tiktok'
       GROUP BY DATE(p.published_at)
       ORDER BY date
-    `).all();
+    `);
 
     // Fill missing days with 0 views
     const dailyViews7Days = fillMissingDays(dailyViews7DaysRaw, 7)

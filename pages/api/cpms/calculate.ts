@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-const db = require('../../../src/lib/db/build-safe');
+import { db } from '../../../src/lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Get creator data with posts and views
-    const creators = db.prepare(`
+    const creators = await db.all(`
       SELECT 
         c.id as creator_id,
         c.username,
@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE c.platform = 'tiktok' AND c.is_active = 1
       GROUP BY c.id, c.username, c.display_name
       ORDER BY c.username
-    `).all();
+    `);
 
     const cpmData = creators.map((creator: any) => {
       const totalPosts = creator.total_posts || 0;
