@@ -1,25 +1,27 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+// Use different database implementations for development vs production
+let db;
 
-// Use different database paths for development vs production
-let dbPath;
 if (process.env.NODE_ENV === 'production') {
-  // In production (Vercel), use /tmp directory which is writable
-  dbPath = '/tmp/ugc-tracker.db';
+  // In production (Vercel), use in-memory database
+  console.log('Using in-memory database for production');
+  db = require('./memory');
 } else {
-  // In development, use local data directory
-  dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
+  // In development, use SQLite
+  const Database = require('better-sqlite3');
+  const path = require('path');
+  const fs = require('fs');
+  
+  const dbPath = path.join(process.cwd(), 'data', 'ugc-tracker.db');
   const dataDir = path.dirname(dbPath);
   
   // Ensure data directory exists in development
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
+  
+  // Initialize SQLite database
+  db = new Database(dbPath);
 }
-
-// Initialize database
-const db = new Database(dbPath);
 
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
