@@ -226,7 +226,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               console.error('PostStat insertion error:', statError, { 
                 postId, 
                 stat: normalized.stat,
-                error: statError.message 
+                error: statError instanceof Error ? statError.message : String(statError)
               });
               // Continue processing other items even if one fails
             }
