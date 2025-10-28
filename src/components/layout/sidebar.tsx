@@ -6,7 +6,8 @@ import {
   Settings, 
   Home,
   Image,
-  DollarSign
+  DollarSign,
+  TrendingUp
 } from 'lucide-react'
 
 const navigation = [
@@ -14,6 +15,7 @@ const navigation = [
   { name: 'Gallery', href: '/gallery', icon: Image },
   { name: 'Creators', href: '/creators', icon: Users },
   { name: 'Payments', href: '/payments', icon: DollarSign },
+  { name: "CPMs", href: '/cpms', icon: TrendingUp },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

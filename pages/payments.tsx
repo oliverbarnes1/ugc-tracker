@@ -38,7 +38,8 @@ export default function PaymentsPage() {
         const response = await fetch('/api/payments/status')
         const result = await response.json()
         if (result.success) {
-          setPaymentData(result.data)
+          const sorted = [...result.data].sort((a: any, b: any) => (b.total_posts || 0) - (a.total_posts || 0))
+          setPaymentData(sorted)
         }
       } catch (error) {
         console.error('Error fetching payment data:', error)
