@@ -1,5 +1,6 @@
 import { Layout } from '@/components/layout/layout'
-import { Image, Calendar, ChevronDown } from 'lucide-react'
+import { VideoStatsEditor } from '../src/components/video-stats-editor'
+import { Image, Calendar, ChevronDown, Edit } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 interface GalleryPost {
@@ -29,11 +30,27 @@ export default function GalleryPage() {
   const [galleryPosts, setGalleryPosts] = useState<GalleryPost[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<GalleryPost | null>(null)
+  const [editingPost, setEditingPost] = useState<GalleryPost | null>(null)
   const [sortBy, setSortBy] = useState<'views' | 'newest' | 'oldest' | 'likes' | 'comments'>('views')
   const [selectedCreator, setSelectedCreator] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [creators, setCreators] = useState<string[]>([])
+
+  const handleEditStats = (post: GalleryPost) => {
+    setEditingPost(post)
+  }
+
+  const handleStatsUpdate = (updatedStats: any) => {
+    if (editingPost) {
+      setGalleryPosts(prev => prev.map(p => 
+        p.id === editingPost.id 
+          ? { ...p, ...updatedStats }
+          : p
+      ))
+      setEditingPost(null)
+    }
+  }
 
   useEffect(() => {
     const fetchGalleryPosts = async () => {
@@ -268,12 +285,21 @@ export default function GalleryPage() {
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b">
                 <h2 className="text-xl font-semibold text-gray-900">Post Details</h2>
-                <button
-                  onClick={() => setSelectedPost(null)}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleEditStats(selectedPost)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Edit Stats
+                  </button>
+                  <button
+                    onClick={() => setSelectedPost(null)}
+                    className="text-gray-400 hover:text-gray-600 text-xl"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               
               <div className="flex">
@@ -389,6 +415,30 @@ export default function GalleryPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Editor Modal */}
+        {editingPost && (
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setEditingPost(null)}
+          >
+            <div onClick={(e) => e.stopPropagation()}>
+              <VideoStatsEditor
+                postId={editingPost.id}
+                initialStats={{
+                  views: editingPost.views,
+                  likes: editingPost.likes,
+                  comments: editingPost.comments,
+                  shares: editingPost.shares,
+                  engagement_rate: editingPost.views > 0 ? 
+                    ((editingPost.likes + editingPost.comments + editingPost.shares) / editingPost.views) : 0
+                }}
+                onStatsUpdate={handleStatsUpdate}
+                onClose={() => setEditingPost(null)}
+              />
             </div>
           </div>
         )}
