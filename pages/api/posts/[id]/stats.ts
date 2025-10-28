@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-const db = require('../../../../src/lib/db/simple');
+const db = require('../../../../src/lib/db/build-safe');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;

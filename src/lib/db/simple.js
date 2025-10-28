@@ -1,10 +1,11 @@
 // Simple database wrapper that works in all environments
 const isProduction = process.env.NODE_ENV === 'production';
+const isBuild = process.env.NODE_ENV === 'production' && process.env.VERCEL === '1';
 
 let db;
 
-if (isProduction) {
-  // Always use in-memory database in production
+// Always use in-memory database during build and production
+if (isProduction || isBuild) {
   db = require('./memory');
 } else {
   // Try SQLite in development, fallback to memory

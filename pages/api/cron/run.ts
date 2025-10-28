@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { runTikTokScraper, normalizeItemToPostAndStat, normalizeApifyItem, sleep } from '../../../src/lib/apify';
-const db = require('../../../src/lib/db/simple');
+const db = require('../../../src/lib/db/build-safe');
 
 interface Creator {
   id: number;
