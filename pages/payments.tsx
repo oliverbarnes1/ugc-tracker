@@ -17,6 +17,7 @@ interface PaymentData {
   is_ready_for_payment: boolean
   days_until_payment: number
   posts_missed: number
+  missed_days: Array<{ date: string; missedCount: number }>
 }
 
 export default function PaymentsPage() {
@@ -31,6 +32,56 @@ export default function PaymentsPage() {
 
   const [paymentData, setPaymentData] = useState<PaymentData[]>([])
   const [loading, setLoading] = useState(true)
+  const [hoveredCreator, setHoveredCreator] = useState<PaymentData | null>(null)
+  const [hoveredRect, setHoveredRect] = useState<DOMRect | null>(null)
+
+  // Tooltip component for missed posts
+  function MissedPostsTooltip({ missedDays, targetRect }: { missedDays: PaymentData['missed_days']; targetRect: DOMRect | null }) {
+    if (missedDays.length === 0 || !targetRect) return null;
+
+    const tooltipWidth = 200;
+    const tooltipHeight = Math.min(missedDays.length, 8) * 24 + 40;
+    const spaceAbove = targetRect.top;
+    const spaceBelow = window.innerHeight - targetRect.bottom;
+
+    let top = targetRect.top - tooltipHeight - 8;
+    let left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+
+    // Adjust if it goes off screen above
+    if (top < 0 && spaceBelow > tooltipHeight) {
+      top = targetRect.bottom + 8;
+    } else if (top < 0) {
+      top = 8;
+    }
+
+    // Clamp horizontally
+    if (left < 8) left = 8;
+    if (left + tooltipWidth > window.innerWidth - 8) left = window.innerWidth - tooltipWidth - 8;
+
+    return (
+      <div
+        className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg max-w-[200px] max-h-60 overflow-y-auto pointer-events-none"
+        style={{ top: `${top}px`, left: `${left}px` }}
+      >
+        <div className="font-semibold mb-2">Missed Posts:</div>
+        <div className="space-y-1">
+          {missedDays.slice(0, 8).map((day, index) => (
+            <div key={index} className="flex items-center justify-between space-x-2">
+              <span>{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span className="text-yellow-400">
+                {day.missedCount === 1 ? '1x' : '2x'}
+              </span>
+            </div>
+          ))}
+          {missedDays.length > 8 && (
+            <div className="text-gray-300 text-xs mt-1">
+              ...and {missedDays.length - 8} more days
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const fetchPaymentData = async () => {
@@ -159,7 +210,17 @@ export default function PaymentsPage() {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <div className="text-sm font-medium text-gray-900">
+                          <div 
+                            className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                            onMouseEnter={(e) => {
+                              setHoveredCreator(creator);
+                              setHoveredRect(e.currentTarget.getBoundingClientRect());
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredCreator(null);
+                              setHoveredRect(null);
+                            }}
+                          >
                             {creator.posts_missed}
                           </div>
                         </td>
@@ -234,6 +295,14 @@ export default function PaymentsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Missed Posts Tooltip */}
+        {hoveredCreator && (
+          <MissedPostsTooltip 
+            missedDays={hoveredCreator.missed_days} 
+            targetRect={hoveredRect} 
+          />
+        )}
       </div>
     </Layout>
   )

@@ -34,9 +34,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Calculate posts per day (average since they started)
       const postsPerDay = daysSinceStart > 0 ? totalPosts / daysSinceStart : 0;
       
-      // Calculate posts missed (assuming 2 posts per day target)
-      const expectedPosts = daysSinceStart * 2;
-      const postsMissed = Math.max(0, expectedPosts - totalPosts);
+      // Get posts per day for missed days calculation
+      const postingDaysWithCounts = db.prepare(`
+        SELECT DATE(p.published_at) as post_date, COUNT(*) as post_count
+        FROM posts p
+        WHERE p.creator_id = ?
+        GROUP BY DATE(p.published_at)
+      `).all(creator.creator_id);
+
+      const postCountsByDate = new Map();
+      postingDaysWithCounts.forEach((day: any) => {
+        postCountsByDate.set(day.post_date, day.post_count);
+      });
+
+      // Calculate missed days and posts missed
+      const missedDays = [];
+      for (let i = 0; i < daysSinceStart; i++) {
+        const currentDate = new Date(firstPostDate);
+        currentDate.setDate(currentDate.getDate() + i);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        
+        const postCount = postCountsByDate.get(dateStr) || 0;
+        if (postCount < 2) {
+          const missedCount = 2 - postCount;
+          missedDays.push({
+            date: dateStr,
+            missedCount: missedCount
+          });
+        }
+      }
+
+      const postsMissed = missedDays.reduce((sum, day) => sum + day.missedCount, 0);
       
       // Estimate when they'll reach 60 posts
       let estimatedPaymentDate = null;
@@ -61,7 +89,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         posts_per_day: postsPerDay,
         is_ready_for_payment: isReadyForPayment,
         days_until_payment: daysUntilPayment,
-        posts_missed: postsMissed
+        posts_missed: postsMissed,
+        missed_days: missedDays
       };
     });
 

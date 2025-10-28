@@ -76,6 +76,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [sortField, setSortField] = useState<'views' | 'likes' | 'shares' | 'published_at'>('views')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; data: any } | null>(null)
 
   const fetchDashboardData = async () => {
     try {
@@ -227,6 +228,26 @@ export default function Dashboard() {
 
   // Custom line chart component
   const CustomLineChart = ({ data, onPointClick, selectedTimePeriod }: any) => {
+    const handleMouseEnter = (event: React.MouseEvent, dataPoint: any) => {
+      const chartContainer = event.currentTarget.closest('.relative')
+      const containerRect = chartContainer?.getBoundingClientRect()
+      
+      if (containerRect) {
+        const x = event.clientX - containerRect.left + 15  // Move 15px to the right
+        const y = event.clientY - containerRect.top - 10
+        
+        setTooltip({
+          visible: true,
+          x: x,
+          y: y,
+          data: dataPoint
+        })
+      }
+    }
+
+    const handleMouseLeave = () => {
+      setTooltip(null)
+    }
     if (!data || data.length === 0) {
       return (
         <div className="h-full flex items-center justify-center text-gray-500">
@@ -257,7 +278,7 @@ export default function Dashboard() {
     }).join(' ')
 
     return (
-      <div className="w-full h-full">
+      <div className="w-full h-full relative">
         <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
           {/* Grid lines */}
           <g transform={`translate(${margin.left}, ${margin.top})`}>
@@ -307,6 +328,8 @@ export default function Dashboard() {
                 strokeWidth={2}
                 style={{ cursor: 'pointer' }}
                 onClick={() => onPointClick(d)}
+                onMouseEnter={(e) => handleMouseEnter(e, d)}
+                onMouseLeave={handleMouseLeave}
                 className="hover:r-6 transition-all"
               />
             ))}
@@ -364,6 +387,26 @@ export default function Dashboard() {
             })}
           </g>
         </svg>
+        
+        {/* Tooltip */}
+        {tooltip && (
+          <div
+            className="absolute z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg cursor-pointer hover:bg-gray-800 transition-colors"
+            style={{
+              left: tooltip.x,
+              top: tooltip.y,
+              transform: 'translateX(-50%)'
+            }}
+            onClick={() => onPointClick(tooltip.data)}
+          >
+            <div className="font-semibold">
+              {formatDate(tooltip.data.date, selectedTimePeriod)}
+            </div>
+            <div className="text-blue-300">
+              {tooltip.data.views?.toLocaleString() || '0'} views
+            </div>
+          </div>
+        )}
       </div>
     )
   }
