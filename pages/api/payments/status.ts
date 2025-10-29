@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ORDER BY c.username
     `);
 
-    const paymentData = creators.map((creator: any) => {
+    const paymentData = await Promise.all(creators.map(async (creator: any) => {
       const firstPostDate = new Date(creator.first_post_date);
       const now = new Date();
       const daysSinceStart = Math.floor((now.getTime() - firstPostDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -92,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         posts_missed: postsMissed,
         missed_days: missedDays
       };
-    });
+    }));
 
     res.status(200).json({
       success: true,
