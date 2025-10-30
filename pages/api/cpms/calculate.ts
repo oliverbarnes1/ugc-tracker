@@ -9,15 +9,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Get creator data with posts and views
     const creators = await db.all(`
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
       SELECT 
         c.id as creator_id,
         c.username,
         c.display_name,
         COUNT(p.id) as total_posts,
-        COALESCE(SUM(ps.views), 0) as total_views
+        COALESCE(SUM(lps.views), 0) as total_views
       FROM creators c
       LEFT JOIN posts p ON c.id = p.creator_id
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE c.platform = 'tiktok' AND c.is_active = 1
       GROUP BY c.id, c.username, c.display_name
       ORDER BY c.username

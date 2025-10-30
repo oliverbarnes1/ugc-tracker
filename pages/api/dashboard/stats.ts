@@ -19,17 +19,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Get total views across all posts
     const totalViewsRow = await db.get(`
-      SELECT COALESCE(SUM(ps.views), 0) as total_views
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
+      SELECT COALESCE(SUM(lps.views), 0) as total_views
       FROM posts p
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
     `) as { total_views: number } | undefined;
 
     // Get total likes across all posts
     const totalLikesRow = await db.get(`
-      SELECT COALESCE(SUM(ps.likes), 0) as total_likes
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
+      SELECT COALESCE(SUM(lps.likes), 0) as total_likes
       FROM posts p
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
     `) as { total_likes: number } | undefined;
 

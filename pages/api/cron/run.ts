@@ -210,11 +210,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               continue;
             }
 
-            // Always insert PostStat with real data (never fake values)
+            // Replace old snapshot and insert the latest PostStat (keep only one row per post)
             console.log(`Inserting PostStat for postId: ${postId}, views: ${normalized.stat.views}, likes: ${normalized.stat.likes}`);
             
             try {
-              // Insert new PostStat (always create new row, don't update existing)
+              // Remove any previous snapshot for this post to avoid double counting
+              await db.run(`
+                DELETE FROM post_stats WHERE post_id = ?
+              `, [postId]);
+
+              // Insert the latest snapshot
               await db.run(`
                 INSERT INTO post_stats (post_id, likes, comments, shares, views, saves, engagement_rate)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
