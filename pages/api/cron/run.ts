@@ -12,8 +12,15 @@ interface Creator {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Allow preflight and ensure JSON responses on all methods
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'x-cron-key, content-type');
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
   // Check for cron secret
