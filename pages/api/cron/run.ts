@@ -47,7 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ 
         success: true, 
         message: 'No active TikTok creators found',
-        processed: 0 
+        processed: 0,
+        errors: 0,
+        batches: 0,
       });
     }
 

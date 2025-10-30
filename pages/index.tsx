@@ -107,7 +107,7 @@ export default function Dashboard() {
       if (result.success) {
         // Refresh dashboard data after successful sync
         await fetchDashboardData()
-        alert(`Sync completed! Processed ${result.processed} items with ${result.errors} errors.`)
+        alert(`Sync completed! Processed ${result.processed ?? 0} items with ${result.errors ?? 0} errors.`)
       } else {
         alert('Sync failed. Please try again.')
       }
