@@ -9,16 +9,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const token = process.env.APIFY_TOKEN
-    const taskId = process.env.APIFY_TASK_ID
+    const actorId = process.env.APIFY_ACTOR_ID
 
     const missing: string[] = []
     if (!token || token.length <= 10) missing.push('APIFY_TOKEN')
-    if (!taskId) missing.push('APIFY_TASK_ID')
+    if (!actorId) missing.push('APIFY_ACTOR_ID')
     if (missing.length > 0) {
       return res.status(400).json({ error: `Missing env: ${missing.join(', ')}` })
     }
 
-    const url = `https://api.apify.com/v2/actor-tasks/${taskId}/runs?token=${token}`
+    const url = `https://api.apify.com/v2/acts/${actorId}/runs?token=${token}`
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
