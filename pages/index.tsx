@@ -98,13 +98,16 @@ export default function Dashboard() {
     try {
       const response = await fetch('/api/sync', { method: 'POST' })
       if (response.ok) {
-        // Optionally parse runId if needed
-        // const { runId } = await response.json()
-        console.log('Sync started')
-        alert('Sync started')
+        alert('Sync started. Check Apify for a new run.')
       } else {
-        console.error('Sync failed with status', response.status)
-        alert('Sync failed')
+        const { error, details } = await response.json().catch(() => ({} as any))
+        if (!error) {
+          const body = await response.text().catch(() => '')
+          console.error('Sync failed', { status: response.status, body })
+          alert(`Sync failed: ${response.statusText}`)
+        } else {
+          alert(`Sync failed: ${error}${details ? '\n' + details : ''}`)
+        }
       }
     } catch (error) {
       console.error('Error starting sync:', error)
