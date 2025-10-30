@@ -33,8 +33,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE p.platform = 'tiktok'
     `) as { total_likes: number } | undefined;
 
-    // Get top posts from last 7 days ordered by views
+    // Use latest post_stats per post to avoid duplicates (multiple snapshots)
+    // Top posts from last 7 days ordered by latest views
     const topPosts = await db.all(`
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
       SELECT 
         p.id,
         p.caption,
@@ -43,20 +52,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         p.published_at,
         c.username,
         c.display_name,
-        ps.views,
-        ps.likes,
-        ps.comments,
-        ps.shares,
-        ps.saves
+        lps.views,
+        lps.likes,
+        lps.comments,
+        lps.shares,
+        lps.saves
       FROM posts p
       JOIN creators c ON p.creator_id = c.id
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
         AND (
           p.created_at >= datetime('now', '-7 days')
-          OR 1=1 -- allow memory db without created_at to still return rows
+          OR 1=1
         )
-      ORDER BY ps.views DESC
+      ORDER BY lps.views DESC
     `);
 
     // Get creator performance with 7-day posting activity
@@ -66,12 +75,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         c.username,
         c.display_name,
         COUNT(p.id) as post_count,
-        COALESCE(SUM(ps.views), 0) as total_views,
-        COALESCE(SUM(ps.likes), 0) as total_likes,
-        COALESCE(AVG(ps.views), 0) as avg_views
+        COALESCE(SUM(lps.views), 0) as total_views,
+        COALESCE(SUM(lps.likes), 0) as total_likes,
+        COALESCE(AVG(lps.views), 0) as avg_views
       FROM creators c
       LEFT JOIN posts p ON c.id = p.creator_id AND p.platform = 'tiktok'
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      ) lps ON p.id = lps.post_id
       WHERE c.platform = 'tiktok' AND c.is_active = 1
       GROUP BY c.id, c.username, c.display_name
       ORDER BY total_views DESC
@@ -105,9 +121,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Get total views for the last 7 days
       const last7DaysViews = await db.get(`
-        SELECT COALESCE(SUM(ps.views), 0) as total_views_7_days
+        WITH latest_ps AS (
+          SELECT ps.* FROM post_stats ps
+          JOIN (
+            SELECT post_id, MAX(id) AS max_id
+            FROM post_stats
+            GROUP BY post_id
+          ) t ON ps.id = t.max_id
+        )
+        SELECT COALESCE(SUM(lps.views), 0) as total_views_7_days
         FROM posts p
-        LEFT JOIN post_stats ps ON p.id = ps.post_id
+        LEFT JOIN latest_ps lps ON p.id = lps.post_id
         WHERE p.creator_id = ?
           AND p.platform = 'tiktok'
           AND p.published_at >= datetime('now', '-7 days')
@@ -148,11 +172,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Get daily views data for different time periods
     const dailyViews7DaysRaw = await db.all(`
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
       SELECT 
         DATE(p.published_at) as date,
-        COALESCE(SUM(ps.views), 0) as views
+        COALESCE(SUM(lps.views), 0) as views
       FROM posts p
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
         AND p.published_at >= datetime('now', '-7 days')
       GROUP BY DATE(p.published_at)
@@ -160,11 +192,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `);
 
     const dailyViews30DaysRaw = await db.all(`
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
       SELECT 
         DATE(p.published_at) as date,
-        COALESCE(SUM(ps.views), 0) as views
+        COALESCE(SUM(lps.views), 0) as views
       FROM posts p
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
         AND p.published_at >= datetime('now', '-30 days')
       GROUP BY DATE(p.published_at)
@@ -172,11 +212,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `);
 
     const dailyViewsAllTimeRaw = await db.all(`
+      WITH latest_ps AS (
+        SELECT ps.* FROM post_stats ps
+        JOIN (
+          SELECT post_id, MAX(id) AS max_id
+          FROM post_stats
+          GROUP BY post_id
+        ) t ON ps.id = t.max_id
+      )
       SELECT 
         DATE(p.published_at) as date,
-        COALESCE(SUM(ps.views), 0) as views
+        COALESCE(SUM(lps.views), 0) as views
       FROM posts p
-      LEFT JOIN post_stats ps ON p.id = ps.post_id
+      LEFT JOIN latest_ps lps ON p.id = lps.post_id
       WHERE p.platform = 'tiktok'
       GROUP BY DATE(p.published_at)
       ORDER BY date
