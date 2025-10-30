@@ -96,24 +96,19 @@ export default function Dashboard() {
   const handleSync = async () => {
     setSyncing(true)
     try {
-      const response = await fetch('/api/cron/run', {
-        method: 'POST',
-        headers: {
-          'x-cron-key': 'super-secret-123456789'
-        }
-      })
-      const result = await response.json()
-      
-      if (result.success) {
-        // Refresh dashboard data after successful sync
-        await fetchDashboardData()
-        alert(`Sync completed! Processed ${result.processed ?? 0} items with ${result.errors ?? 0} errors.`)
+      const response = await fetch('/api/sync', { method: 'POST' })
+      if (response.ok) {
+        // Optionally parse runId if needed
+        // const { runId } = await response.json()
+        console.log('Sync started')
+        alert('Sync started')
       } else {
-        alert('Sync failed. Please try again.')
+        console.error('Sync failed with status', response.status)
+        alert('Sync failed')
       }
     } catch (error) {
-      console.error('Error syncing data:', error)
-      alert('Sync failed. Please try again.')
+      console.error('Error starting sync:', error)
+      alert('Sync failed')
     } finally {
       setSyncing(false)
     }
