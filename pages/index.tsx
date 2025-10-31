@@ -117,6 +117,12 @@ export default function Dashboard() {
           const parts = [errorMsg]
           if (details.message) parts.push(`\n${details.message}`)
           if (details.actorId) parts.push(`\nActor ID used: ${details.actorId}`)
+          if (details.expectedFormats && Array.isArray(details.expectedFormats)) {
+            parts.push(`\n\nExpected formats:`)
+            details.expectedFormats.forEach((fmt: string, i: number) => {
+              parts.push(`\n${i + 1}. ${fmt}`)
+            })
+          }
           if (details.howToFix && Array.isArray(details.howToFix)) {
             parts.push(`\n\nHow to fix:`)
             details.howToFix.forEach((step: string, i: number) => {

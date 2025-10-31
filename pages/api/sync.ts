@@ -18,6 +18,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: `Missing env: ${missing.join(', ')}` })
     }
 
+    // Validate Actor ID format (should be username~actor-name or UUID)
+    const isValidActorFormat = actorId ? (
+      /^[a-zA-Z0-9._-]+~[a-zA-Z0-9._-]+$/.test(actorId) || 
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(actorId)
+    ) : false
+    if (!isValidActorFormat) {
+      return res.status(400).json({
+        error: 'Invalid Actor ID format',
+        details: {
+          message: `The Actor ID "${actorId}" doesn't match the expected format`,
+          actorId,
+          expectedFormats: [
+            'username~actor-name (e.g., apify~tiktok-scraper)',
+            'Actor UUID (e.g., 12345678-abcd-1234-abcd-123456789abc)'
+          ],
+          howToFix: [
+            'Go to Apify → Actors → Your Actor → API tab',
+            'Copy the exact ID from the Run URL: https://api.apify.com/v2/acts/<ACTOR_ID>/runs',
+            'The ID should look like: username~actor-name or a UUID',
+            'If you see a shorter ID like vB0foLluLnDBEWNgL, that might be a Task ID, not an Actor ID'
+          ]
+        }
+      })
+    }
+
     const actorUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${token}`
     const response = await fetch(actorUrl, {
       method: 'POST',
