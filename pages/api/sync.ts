@@ -10,17 +10,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const token = process.env.APIFY_TOKEN
     const actorId = process.env.APIFY_ACTOR_ID
+    const taskId = process.env.APIFY_TASK_ID
 
     const missing: string[] = []
     if (!token || token.length <= 10) missing.push('APIFY_TOKEN')
-    if (!actorId) missing.push('APIFY_ACTOR_ID')
+    if (!actorId && !taskId) missing.push('APIFY_ACTOR_ID or APIFY_TASK_ID')
     if (missing.length > 0) {
       return res.status(400).json({ error: `Missing env: ${missing.join(', ')}` })
     }
 
+    // If Task ID is provided without Actor ID, run the Task directly
+    if (!actorId && taskId) {
+      const taskUrl = `https://api.apify.com/v2/actor-tasks/${taskId}/runs?token=${token}`
+      const taskResp = await fetch(taskUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      if (!taskResp.ok) {
+        const bodyText = await taskResp.text().catch(() => '')
+        return res.status(500).json({ error: 'Apify Task run failed', details: bodyText.slice(0, 500) })
+      }
+      const taskData: any = await taskResp.json().catch(() => ({}))
+      const taskRunId = taskData?.id || taskData?.data?.id || taskData?.data?.runId
+      if (!taskRunId) return res.status(500).json({ error: 'Apify Task run started but no runId in response', raw: taskData })
+      return res.status(200).json({ ok: true, runId: taskRunId })
+    }
+
+    // Otherwise, validate and run Actor
     // Validate Actor ID format (should be username~actor-name or UUID)
     const isValidActorFormat = actorId ? (
-      /^[a-zA-Z0-9._-]+~[a-zA-Z0-9._-]+$/.test(actorId) || 
+      /^[a-zA-Z0-9._-]+~[a-zA-Z0-9._-]+$/.test(actorId) ||
       /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(actorId)
     ) : false
     if (!isValidActorFormat) {
