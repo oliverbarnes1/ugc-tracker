@@ -100,18 +100,39 @@ export default function Dashboard() {
       if (response.ok) {
         alert('Sync started. Check Apify for a new run.')
       } else {
-        const { error, details } = await response.json().catch(() => ({} as any))
-        if (!error) {
-          const body = await response.text().catch(() => '')
-          console.error('Sync failed', { status: response.status, body })
-          alert(`Sync failed: ${response.statusText}`)
+        const data = await response.json().catch(() => ({} as any))
+        const { error, details } = data
+        
+        let errorMsg = 'Sync failed'
+        if (typeof error === 'string') {
+          errorMsg = `Sync failed: ${error}`
+        } else if (error && typeof error === 'object') {
+          errorMsg = `Sync failed: ${error.message || error.type || 'Unknown error'}`
+        } else if (error) {
+          errorMsg = `Sync failed: ${String(error)}`
+        }
+        
+        // Handle structured details object
+        if (details && typeof details === 'object') {
+          const parts = [errorMsg]
+          if (details.message) parts.push(`\n${details.message}`)
+          if (details.actorId) parts.push(`\nActor ID used: ${details.actorId}`)
+          if (details.howToFix && Array.isArray(details.howToFix)) {
+            parts.push(`\n\nHow to fix:`)
+            details.howToFix.forEach((step: string, i: number) => {
+              parts.push(`\n${i + 1}. ${step}`)
+            })
+          }
+          alert(parts.join(''))
+        } else if (details) {
+          alert(`${errorMsg}\n${String(details)}`)
         } else {
-          alert(`Sync failed: ${error}${details ? '\n' + details : ''}`)
+          alert(errorMsg)
         }
       }
     } catch (error) {
       console.error('Error starting sync:', error)
-      alert('Sync failed')
+      alert('Sync failed. Please try again.')
     } finally {
       setSyncing(false)
     }
