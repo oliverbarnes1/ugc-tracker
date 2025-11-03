@@ -195,34 +195,41 @@ export default function Dashboard() {
 
   // Handle chart point click to open top video for that day
   const handleChartClick = async (data: any) => {
-    console.log('Chart clicked:', data)
-    
     if (!data || !data.date) {
       console.log('No date found in clicked data')
       return
     }
 
-    const clickedDate = data.date
-    console.log('Clicked date:', clickedDate)
-    console.log('Date type:', typeof clickedDate)
+    // Normalize date to YYYY-MM-DD format
+    let dateStr = data.date
+    if (typeof dateStr === 'string') {
+      // If it's already YYYY-MM-DD, use it
+      // If it contains time (ISO format), extract just the date part
+      dateStr = dateStr.split('T')[0]
+    } else if (dateStr instanceof Date) {
+      // Convert Date object to YYYY-MM-DD
+      dateStr = dateStr.toISOString().split('T')[0]
+    }
 
     try {
       // Fetch the top video for the clicked date
-      const response = await fetch(`/api/dashboard/top-video?date=${clickedDate}`)
-      const result = await response.json()
+      const response = await fetch(`/api/dashboard/top-video?date=${encodeURIComponent(dateStr)}`)
       
-      console.log('API response:', result)
-      console.log('API URL:', `/api/dashboard/top-video?date=${clickedDate}`)
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`)
+      }
+      
+      const result = await response.json()
       
       if (result.success && result.video && result.video.post_url) {
         // Open the video in a new tab
         window.open(result.video.post_url, '_blank')
       } else {
-        alert(`No video found for this date: ${clickedDate}`)
+        alert(`No video found for ${formatDate(dateStr, selectedTimePeriod)}`)
       }
     } catch (error) {
       console.error('Error fetching top video:', error)
-      alert('Error loading video')
+      alert('Error loading video. Please try again.')
     }
   }
 
