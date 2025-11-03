@@ -44,6 +44,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(actorId)
     ) : false
     if (!isValidActorFormat) {
+      // If the supplied "actorId" looks like a Task ID, try running it as a Task for convenience
+      if (actorId) {
+        const possibleTaskUrl = `https://api.apify.com/v2/actor-tasks/${actorId}/runs?token=${token}`
+        const tResp = await fetch(possibleTaskUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({})
+        })
+        if (tResp.ok) {
+          const tData: any = await tResp.json().catch(() => ({}))
+          const tRunId = tData?.id || tData?.data?.id || tData?.data?.runId
+          if (tRunId) {
+            return res.status(200).json({ ok: true, runId: tRunId })
+          }
+        }
+      }
+
       return res.status(400).json({
         error: 'Invalid Actor ID format',
         details: {
@@ -57,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             'Go to Apify → Actors → Your Actor → API tab',
             'Copy the exact ID from the Run URL: https://api.apify.com/v2/acts/<ACTOR_ID>/runs',
             'The ID should look like: username~actor-name or a UUID',
-            'If you see a shorter ID like vB0foLluLnDBEWNgL, that might be a Task ID, not an Actor ID'
+            'If you see a short ID, it may be a Task ID. Set APIFY_TASK_ID to use it, or keep APIFY_ACTOR_ID empty and the API will accept a Task ID automatically.'
           ]
         }
       })
