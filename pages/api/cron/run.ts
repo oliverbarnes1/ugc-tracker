@@ -72,6 +72,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const batch = batches[batchIndex];
       console.log(`Processing batch ${batchIndex + 1}/${batches.length} with ${batch.length} creators`);
 
+      // Before importing, purge existing data for this batch's creators to avoid duplicates
+      try {
+        const creatorIds = batch.map(c => c.id)
+        if (creatorIds.length > 0) {
+          const placeholders = creatorIds.map(() => '?').join(',')
+          // Remove stats tied to posts of these creators
+          await db.run(`
+            DELETE FROM post_stats 
+            WHERE post_id IN (
+              SELECT id FROM posts WHERE creator_id IN (${placeholders})
+            )
+          `, creatorIds)
+
+          // Remove original stats snapshots
+          await db.run(`
+            DELETE FROM post_stats_original 
+            WHERE post_id IN (
+              SELECT id FROM posts WHERE creator_id IN (${placeholders})
+            )
+          `, creatorIds)
+
+          // Optionally remove aggregated daily stats if present
+          try {
+            await db.run(`
+              DELETE FROM creator_stats_daily 
+              WHERE creator_id IN (${placeholders})
+            `, creatorIds)
+          } catch (_) { /* table may not exist; ignore */ }
+
+          // Remove posts for these creators
+          await db.run(`
+            DELETE FROM posts WHERE creator_id IN (${placeholders})
+          `, creatorIds)
+        }
+      } catch (purgeError) {
+        console.error('Error purging existing data for creators batch:', purgeError)
+      }
+
       // Create sync logs for this batch
       const syncLogs = await Promise.all(batch.map(async (creator) => {
         await db.run(`
