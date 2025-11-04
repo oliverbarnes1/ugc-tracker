@@ -192,6 +192,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               creator = batch.find(c => c.username === item.username || c.external_id === item.userId);
             }
             
+            // Final fallback: query database directly if batch matching failed
+            // This handles cases like username changes (e.g., leo.nasr -> leo.picks)
+            if (!creator && item.authorMeta && item.authorMeta.name) {
+              const dbCreator = await db.get(`
+                SELECT id, external_id, platform, username, display_name, is_active
+                FROM creators 
+                WHERE username = ? AND platform = 'tiktok' AND is_active = 1
+              `, [item.authorMeta.name]) as Creator | undefined;
+              
+              if (dbCreator) {
+                creator = dbCreator;
+                console.log(`Creator lookup by DB query: ${item.authorMeta.name} -> ${creator.username}`);
+              }
+            }
+            
             if (!creator) {
               console.error('Could not find creator for item:', { id: item.id, authorMeta: item.authorMeta, webVideoUrl: item.webVideoUrl });
               continue;

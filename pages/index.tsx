@@ -255,6 +255,10 @@ export default function Dashboard() {
     const handleMouseLeave = () => {
       setTooltip(null)
     }
+
+    const handleChartMouseLeave = () => {
+      setTooltip(null)
+    }
     if (!data || data.length === 0) {
       return (
         <div className="h-full flex items-center justify-center text-gray-500">
@@ -285,7 +289,7 @@ export default function Dashboard() {
     }).join(' ')
 
     return (
-      <div className="w-full h-full relative">
+      <div className="w-full h-full relative" onMouseLeave={handleChartMouseLeave}>
         <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
           {/* Grid lines */}
           <g transform={`translate(${margin.left}, ${margin.top})`}>
@@ -395,22 +399,23 @@ export default function Dashboard() {
           </g>
         </svg>
         
-        {/* Tooltip */}
+        {/* Tooltip - pointer-events-none so it doesn't block hover events on circles */}
         {tooltip && (
           <div
-            className="absolute z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg cursor-pointer hover:bg-gray-800 transition-colors"
+            className="absolute z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg transition-colors pointer-events-none"
             style={{
               left: tooltip.x,
               top: tooltip.y,
               transform: 'translateX(-50%)'
             }}
-            onClick={() => onPointClick(tooltip.data)}
           >
-            <div className="font-semibold">
-              {formatDate(tooltip.data.date, selectedTimePeriod)}
-            </div>
-            <div className="text-blue-300">
-              {tooltip.data.views?.toLocaleString() || '0'} views
+            <div className="pointer-events-auto cursor-pointer hover:opacity-90" onClick={() => onPointClick(tooltip.data)}>
+              <div className="font-semibold">
+                {formatDate(tooltip.data.date, selectedTimePeriod)}
+              </div>
+              <div className="text-blue-300">
+                {tooltip.data.views?.toLocaleString() || '0'} views
+              </div>
             </div>
           </div>
         )}
