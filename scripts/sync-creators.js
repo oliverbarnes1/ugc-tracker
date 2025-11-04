@@ -2,7 +2,7 @@ const db = require('../src/lib/db');
 
 // List of creators to add
 const creators = [
-  'leo.nasr',
+  'leo.picks',
   'blion.picks',
   'kat.picks',
   'victoria_picks',

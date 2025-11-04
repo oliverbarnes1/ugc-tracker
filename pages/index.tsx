@@ -220,34 +220,41 @@ export default function Dashboard() {
 
   // Handle chart point click to open top video for that day
   const handleChartClick = async (data: any) => {
-    console.log('Chart clicked:', data)
-    
     if (!data || !data.date) {
       console.log('No date found in clicked data')
       return
     }
 
-    const clickedDate = data.date
-    console.log('Clicked date:', clickedDate)
-    console.log('Date type:', typeof clickedDate)
+    // Normalize date to YYYY-MM-DD format
+    let dateStr = data.date
+    if (typeof dateStr === 'string') {
+      // If it's already YYYY-MM-DD, use it
+      // If it contains time (ISO format), extract just the date part
+      dateStr = dateStr.split('T')[0]
+    } else if (dateStr instanceof Date) {
+      // Convert Date object to YYYY-MM-DD
+      dateStr = dateStr.toISOString().split('T')[0]
+    }
 
     try {
       // Fetch the top video for the clicked date
-      const response = await fetch(`/api/dashboard/top-video?date=${clickedDate}`)
-      const result = await response.json()
+      const response = await fetch(`/api/dashboard/top-video?date=${encodeURIComponent(dateStr)}`)
       
-      console.log('API response:', result)
-      console.log('API URL:', `/api/dashboard/top-video?date=${clickedDate}`)
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`)
+      }
+      
+      const result = await response.json()
       
       if (result.success && result.video && result.video.post_url) {
         // Open the video in a new tab
         window.open(result.video.post_url, '_blank')
       } else {
-        alert(`No video found for this date: ${clickedDate}`)
+        alert(`No video found for ${formatDate(dateStr, selectedTimePeriod)}`)
       }
     } catch (error) {
       console.error('Error fetching top video:', error)
-      alert('Error loading video')
+      alert('Error loading video. Please try again.')
     }
   }
 
@@ -271,6 +278,10 @@ export default function Dashboard() {
     }
 
     const handleMouseLeave = () => {
+      setTooltip(null)
+    }
+
+    const handleChartMouseLeave = () => {
       setTooltip(null)
     }
     if (!data || data.length === 0) {
@@ -303,7 +314,7 @@ export default function Dashboard() {
     }).join(' ')
 
     return (
-      <div className="w-full h-full relative">
+      <div className="w-full h-full relative" onMouseLeave={handleChartMouseLeave}>
         <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
           {/* Grid lines */}
           <g transform={`translate(${margin.left}, ${margin.top})`}>
@@ -413,22 +424,23 @@ export default function Dashboard() {
           </g>
         </svg>
         
-        {/* Tooltip */}
+        {/* Tooltip - pointer-events-none so it doesn't block hover events on circles */}
         {tooltip && (
           <div
-            className="absolute z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg cursor-pointer hover:bg-gray-800 transition-colors"
+            className="absolute z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg transition-colors pointer-events-none"
             style={{
               left: tooltip.x,
               top: tooltip.y,
               transform: 'translateX(-50%)'
             }}
-            onClick={() => onPointClick(tooltip.data)}
           >
-            <div className="font-semibold">
-              {formatDate(tooltip.data.date, selectedTimePeriod)}
-            </div>
-            <div className="text-blue-300">
-              {tooltip.data.views?.toLocaleString() || '0'} views
+            <div className="pointer-events-auto cursor-pointer hover:opacity-90" onClick={() => onPointClick(tooltip.data)}>
+              <div className="font-semibold">
+                {formatDate(tooltip.data.date, selectedTimePeriod)}
+              </div>
+              <div className="text-blue-300">
+                {tooltip.data.views?.toLocaleString() || '0'} views
+              </div>
             </div>
           </div>
         )}

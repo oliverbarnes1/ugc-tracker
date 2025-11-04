@@ -55,6 +55,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`Found ${creators.length} active TikTok creators`);
 
+    // PURGE ALL EXISTING DATA for active creators BEFORE importing new data
+    // This ensures a clean slate and prevents duplicates/over-counting
+    console.log('Purging existing data for all active creators...');
+    const creatorIds = creators.map(c => c.id);
+    if (creatorIds.length > 0) {
+      const placeholders = creatorIds.map(() => '?').join(',');
+      
+      // Delete stats tied to posts of these creators (in correct order due to foreign keys)
+      await db.run(`
+        DELETE FROM post_stats 
+        WHERE post_id IN (
+          SELECT id FROM posts WHERE creator_id IN (${placeholders})
+        )
+      `, creatorIds);
+      console.log(`Deleted post_stats for ${creatorIds.length} creators`);
+
+      // Delete original stats snapshots
+      await db.run(`
+        DELETE FROM post_stats_original 
+        WHERE post_id IN (
+          SELECT id FROM posts WHERE creator_id IN (${placeholders})
+        )
+      `, creatorIds);
+      console.log(`Deleted post_stats_original for ${creatorIds.length} creators`);
+
+      // Delete aggregated daily stats if present
+      try {
+        await db.run(`
+          DELETE FROM creator_stats_daily 
+          WHERE creator_id IN (${placeholders})
+        `, creatorIds);
+        console.log(`Deleted creator_stats_daily for ${creatorIds.length} creators`);
+      } catch (err) {
+        // Table may not exist; ignore
+        console.log('creator_stats_daily table not found or error (ignored)');
+      }
+
+      // Delete all posts for these creators
+      await db.run(`
+        DELETE FROM posts WHERE creator_id IN (${placeholders})
+      `, creatorIds);
+      console.log(`Deleted posts for ${creatorIds.length} creators`);
+      
+      console.log('Purge complete. Starting fresh import...');
+    }
+
     // Batch creators into groups of 10
     const batchSize = 10;
     const batches: Creator[][] = [];
@@ -184,6 +230,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Fallback to other matching methods
             if (!creator) {
               creator = batch.find(c => c.username === item.username || c.external_id === item.userId);
+            }
+            
+            // Final fallback: query database directly if batch matching failed
+            // This handles cases like username changes (e.g., leo.nasr -> leo.picks)
+            if (!creator && item.authorMeta && item.authorMeta.name) {
+              const dbCreator = await db.get(`
+                SELECT id, external_id, platform, username, display_name, is_active
+                FROM creators 
+                WHERE username = ? AND platform = 'tiktok' AND is_active = 1
+              `, [item.authorMeta.name]) as Creator | undefined;
+              
+              if (dbCreator) {
+                creator = dbCreator;
+                console.log(`Creator lookup by DB query: ${item.authorMeta.name} -> ${creator.username}`);
+              }
             }
             
             if (!creator) {
