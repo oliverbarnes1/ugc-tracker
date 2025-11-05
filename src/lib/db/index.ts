@@ -60,7 +60,19 @@ export const db = {
         // Turso client uses execute() method
         try {
           const result = await remoteDb.execute(sql, toArray(params));
-          return result.rows as T[];
+          // Turso returns rows as an array of objects with column names as keys
+          // Convert to plain objects if needed
+          return result.rows.map((row: any) => {
+            if (row && typeof row === 'object') {
+              // Convert row object to plain object
+              const plain: any = {};
+              for (const key in row) {
+                plain[key] = row[key];
+              }
+              return plain as T;
+            }
+            return row as T;
+          });
         } catch (err) {
           console.error('Turso all error:', err);
           console.error('SQL:', sql);
@@ -103,24 +115,47 @@ export const db = {
     return localDb!.prepare(sql).get(...toArray(params)) as T | undefined;
   },
 
-  async run(sql: string, params?: Params): Promise<void> {
+  async run(sql: string, params?: Params): Promise<{ changes: number; lastInsertRowid?: number }> {
     if (remoteDb) {
       if (isTurso) {
         // Turso client uses execute() method
         try {
-          await remoteDb.execute(sql, toArray(params));
+          const result = await remoteDb.execute(sql, toArray(params));
+          // Turso/libsql client returns result with meta information
+          // Check what properties are available
+          const meta = (result as any).meta || {};
+          const changes = meta.rows_written || meta.rows_read || 0;
+          const lastInsertRowidRaw = meta.last_insert_rowid || undefined;
+          const lastInsertRowid = lastInsertRowidRaw !== undefined ? Number(lastInsertRowidRaw) : undefined;
+          
+          // Log the full result structure for debugging (first time only to avoid spam)
+          if (!(globalThis as any).__turso_logged) {
+            console.log('Turso execute result structure:', JSON.stringify(result, null, 2));
+            (globalThis as any).__turso_logged = true;
+          }
+          
+          return {
+            changes: changes || 0,
+            lastInsertRowid: lastInsertRowid,
+          };
         } catch (err) {
           console.error('Turso execute error:', err);
           console.error('SQL:', sql);
           console.error('Params:', params);
           throw err;
         }
-        return;
       }
       // For in-memory database, use the same interface as SQLite
-      remoteDb.prepare(sql).run(...toArray(params));
-      return;
+      const result = remoteDb.prepare(sql).run(...toArray(params));
+      return {
+        changes: result.changes || 0,
+        lastInsertRowid: result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : undefined,
+      };
     }
-    localDb!.prepare(sql).run(...toArray(params));
+    const result = localDb!.prepare(sql).run(...toArray(params));
+    return {
+      changes: result.changes || 0,
+      lastInsertRowid: result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : undefined,
+    };
   },
 };

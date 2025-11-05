@@ -266,27 +266,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
 
             // Upsert the post
-            await db.run(`
-              INSERT INTO posts (creator_id, external_id, platform, content_type, caption, media_url, thumbnail_url, post_url, published_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(creator_id, external_id, platform) DO UPDATE SET
-                caption = excluded.caption,
-                media_url = excluded.media_url,
-                thumbnail_url = excluded.thumbnail_url,
-                post_url = excluded.post_url,
-                published_at = excluded.published_at,
-                updated_at = CURRENT_TIMESTAMP
-            `, [
-              normalized.post.creator_id,
-              normalized.post.external_id,
-              normalized.post.platform,
-              normalized.post.content_type,
-              normalized.post.caption,
-              normalized.post.media_url,
-              normalized.post.thumbnail_url,
-              normalized.post.post_url,
-              normalized.post.published_at
-            ]);
+            try {
+              const insertResult = await db.run(`
+                INSERT INTO posts (creator_id, external_id, platform, content_type, caption, media_url, thumbnail_url, post_url, published_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(creator_id, external_id, platform) DO UPDATE SET
+                  caption = excluded.caption,
+                  media_url = excluded.media_url,
+                  thumbnail_url = excluded.thumbnail_url,
+                  post_url = excluded.post_url,
+                  published_at = excluded.published_at,
+                  updated_at = CURRENT_TIMESTAMP
+              `, [
+                normalized.post.creator_id,
+                normalized.post.external_id,
+                normalized.post.platform,
+                normalized.post.content_type,
+                normalized.post.caption,
+                normalized.post.media_url,
+                normalized.post.thumbnail_url,
+                normalized.post.post_url,
+                normalized.post.published_at
+              ]);
+              console.log(`Post upsert result: changes=${insertResult.changes}, lastInsertRowid=${insertResult.lastInsertRowid}`);
+            } catch (insertError) {
+              console.error('Post insert error:', insertError);
+              console.error('Post data:', normalized.post);
+              continue;
+            }
 
             // Get the post ID (either from insert or existing post)
             // Since we can't get lastInsertRowid with the new async API, we'll query for the post ID
@@ -314,12 +321,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             
             try {
               // Remove any previous snapshot for this post to avoid double counting
-              await db.run(`
+              const deleteResult = await db.run(`
                 DELETE FROM post_stats WHERE post_id = ?
               `, [postId]);
+              console.log(`PostStat delete result: changes=${deleteResult.changes} for postId: ${postId}`);
 
               // Insert the latest snapshot
-              await db.run(`
+              const insertResult = await db.run(`
                 INSERT INTO post_stats (post_id, likes, comments, shares, views, saves, engagement_rate)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
               `, [
@@ -332,7 +340,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 normalized.stat.engagement_rate
               ]);
               
-              console.log(`PostStat inserted successfully for postId: ${postId}`);
+              console.log(`PostStat inserted successfully for postId: ${postId}, changes=${insertResult.changes}, lastInsertRowid=${insertResult.lastInsertRowid}`);
             } catch (statError) {
               console.error('PostStat insertion error:', statError, { 
                 postId, 
