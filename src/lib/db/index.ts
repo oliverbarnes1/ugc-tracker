@@ -3,6 +3,7 @@ import type { Database as BetterSqlite3Database } from 'better-sqlite3';
 import path from 'path';
 
 const isProd = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+const isLocal = !isProd;
 
 type Params = any[] | Record<string, any> | undefined;
 
@@ -46,15 +47,26 @@ if (isProd) {
   }
 } else {
   // Local dev uses the existing SQLite file (better-sqlite3)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const BetterSqlite3 = require('better-sqlite3');
-  const dbPath = process.env.LOCAL_SQLITE_PATH || path.join(process.cwd(), 'data', 'ugc-tracker.db');
-  localDb = new BetterSqlite3(dbPath);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const BetterSqlite3 = require('better-sqlite3');
+    const dbPath = process.env.LOCAL_SQLITE_PATH || path.join(process.cwd(), 'data', 'ugc-tracker.db');
+    localDb = new BetterSqlite3(dbPath);
+  } catch (err) {
+    console.error('Failed to initialize local SQLite database:', err);
+    // Don't throw - let it fail gracefully and use in-memory as fallback
+    localDb = null;
+  }
 }
 
 // Unified API
 export const db = {
   async all<T = any>(sql: string, params?: Params): Promise<T[]> {
+    // Always prefer local database if available
+    if (localDb) {
+      return localDb.prepare(sql).all(...toArray(params)) as T[];
+    }
+    
     if (remoteDb) {
       if (isTurso) {
         // Turso client uses execute() method
@@ -83,11 +95,16 @@ export const db = {
       // For in-memory database, use the same interface as SQLite
       return remoteDb.prepare(sql).all(...toArray(params)) as T[];
     }
-    // local
-    return localDb!.prepare(sql).all(...toArray(params)) as T[];
+    
+    throw new Error('No database connection available');
   },
 
   async get<T = any>(sql: string, params?: Params): Promise<T | undefined> {
+    // Always prefer local database if available
+    if (localDb) {
+      return localDb.prepare(sql).get(...toArray(params)) as T | undefined;
+    }
+    
     if (remoteDb) {
       if (isTurso) {
         // Turso client uses execute() method
@@ -112,10 +129,20 @@ export const db = {
       // For in-memory database, use the same interface as SQLite
       return remoteDb.prepare(sql).get(...toArray(params)) as T | undefined;
     }
-    return localDb!.prepare(sql).get(...toArray(params)) as T | undefined;
+    
+    throw new Error('No database connection available');
   },
 
   async run(sql: string, params?: Params): Promise<{ changes: number; lastInsertRowid?: number }> {
+    // Always prefer local database if available
+    if (localDb) {
+      const result = localDb.prepare(sql).run(...toArray(params));
+      return {
+        changes: result.changes || 0,
+        lastInsertRowid: result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : undefined,
+      };
+    }
+    
     if (remoteDb) {
       if (isTurso) {
         // Turso client uses execute() method
@@ -152,10 +179,7 @@ export const db = {
         lastInsertRowid: result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : undefined,
       };
     }
-    const result = localDb!.prepare(sql).run(...toArray(params));
-    return {
-      changes: result.changes || 0,
-      lastInsertRowid: result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : undefined,
-    };
+    
+    throw new Error('No database connection available');
   },
 };
