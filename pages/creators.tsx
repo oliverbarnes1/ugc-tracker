@@ -1,5 +1,4 @@
 import { Layout } from '@/components/layout/layout'
-import { Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 interface CreatorStats {
@@ -11,6 +10,18 @@ interface CreatorStats {
   avg_views: number
   activity: { date: string; count: number }[]
   total_views_7_days: number
+}
+
+const formatCreatorHandle = (username: string) => {
+  if (!username) return ''
+  return username.startsWith('@') ? username : `@${username}`
+}
+
+const formatCreatorDisplayName = (displayName: string, username: string) => {
+  if (displayName && displayName.trim().length > 0) {
+    return displayName
+  }
+  return formatCreatorHandle(username)
 }
 
 export default function CreatorsPage() {
@@ -107,9 +118,9 @@ export default function CreatorsPage() {
                             rel="noopener noreferrer"
                             className="font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
                           >
-                            @{creator.username}
+                            {formatCreatorHandle(creator.username)}
                           </a>
-                          <p className="text-sm text-gray-600">{creator.display_name}</p>
+                          <p className="text-sm text-gray-600">{formatCreatorDisplayName(creator.display_name, creator.username)}</p>
                         </div>
                       </div>
                       <div className="text-right">

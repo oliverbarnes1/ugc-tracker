@@ -88,3 +88,5 @@ CREATE INDEX IF NOT EXISTS idx_post_stats_post_id ON post_stats(post_id);
 CREATE INDEX IF NOT EXISTS idx_creator_stats_daily_creator_date ON creator_stats_daily(creator_id, date);
 CREATE INDEX IF NOT EXISTS idx_sync_logs_creator_id ON sync_logs(creator_id);
 CREATE INDEX IF NOT EXISTS idx_sync_logs_created_at ON sync_logs(created_at);
+
+

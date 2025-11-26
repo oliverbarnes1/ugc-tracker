@@ -98,7 +98,12 @@ export default function Dashboard() {
     try {
       const response = await fetch('/api/sync', { method: 'POST' })
       if (response.ok) {
-        alert('Sync started. Check Apify for a new run.')
+        const data = await response.json().catch(() => ({} as any))
+        const imported = data.imported || 0
+        const items = data.items || 0
+        alert(`Sync completed! Imported ${imported} posts from ${items} items.`)
+        // Refresh dashboard data
+        await fetchDashboardData()
       } else {
         const data = await response.json().catch(() => ({} as any))
         const { error, details } = data
